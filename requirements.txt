@@ -1,0 +1,7 @@
+pandas
+numpy
+xarray
+statsmodels
+pymannkendall
+matplotlib
+seaborn
