@@ -2,6 +2,7 @@ from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
+import numpy as np
 
 MAP_METADATA = {
     'Nome'            : 'name',
@@ -202,7 +203,7 @@ wide = monthly.pivot(index='month_start', columns='region', values='monthly_temp
 plt.figure(figsize=(10, 6))
 for region in wide.columns:
     plt.plot(wide.index, wide[region], label=region)
-plt.title('Comparativo de Temperatura Média Mensal por Mesorregião\n(Últimos 12 Meses)')
+plt.title('Comparativo de Temperatura Média Mensal por Mesorregião')
 plt.xlabel('Mês')
 plt.ylabel('Temp. Média (°C)')
 plt.legend(loc='upper left', bbox_to_anchor=(1,1))
@@ -211,5 +212,82 @@ plt.tight_layout()
 
 plt.savefig('comparativo_temp_media_mensal.png')
 plt.show()
+
+regional_averages = monthly.groupby('region')['monthly_temp_mean'].mean().sort_values()
+
+# Identificar região com menor e maior temperatura média
+coldest_region = regional_averages.index[0]
+warmest_region = regional_averages.index[-1]
+
+print(f"Região mais fria: {coldest_region} ({regional_averages.iloc[0]:.1f}°C)")
+print(f"Região mais quente: {warmest_region} ({regional_averages.iloc[-1]:.1f}°C)")
+
+# Filtrar dados apenas para essas duas regiões
+comparison_data = monthly[monthly['region'].isin([coldest_region, warmest_region])]
+
+# Criar o gráfico de comparação
+plt.figure(figsize=(12, 7))
+
+# Cores para as regiões
+colors = {'coldest': '#87CEEB', 'warmest': '#FFB6C1'}  # Azul claro e rosa claro
+trend_colors = {'coldest': '#1E90FF', 'warmest': '#DC143C'}  # Azul forte e vermelho forte
+
+# Plotar as duas regiões com linhas leves
+for i, region in enumerate([coldest_region, warmest_region]):
+    data = comparison_data[comparison_data['region'] == region].sort_values('month_start')
+    color_key = 'coldest' if region == coldest_region else 'warmest'
+    
+    # Linha original com cor leve
+    plt.plot(data['month_start'], data['monthly_temp_mean'], 
+             marker='o', linewidth=1.5, markersize=4, 
+             color=colors[color_key], alpha=0.7, label=f'{region} (dados)')
+    
+    # Linha de tendência com cor forte
+    x_numeric = pd.to_numeric(data['month_start'])
+    z = np.polyfit(x_numeric, data['monthly_temp_mean'], 1)
+    p = np.poly1d(z)
+    plt.plot(data['month_start'], p(x_numeric), 
+             linewidth=3, color=trend_colors[color_key], 
+             linestyle='--', label=f'{region} (tendência)')
+
+# Configurar o gráfico
+plt.title('Comparação: Mesorregião Mais Fria vs Mais Quente\nTemperatura Média Mensal', 
+          fontsize=14, fontweight='bold')
+plt.xlabel('Mês', fontsize=12)
+plt.ylabel('Temperatura Média (°C)', fontsize=12)
+plt.legend(fontsize=10, loc='best')
+plt.grid(True, alpha=0.3)
+plt.xticks(rotation=45)
+
+# Adicionar anotações com diferenças (versão mais robusta)
+for month in comparison_data['month_start'].unique():
+    cold_data = comparison_data[(comparison_data['region'] == coldest_region) & 
+                               (comparison_data['month_start'] == month)]['monthly_temp_mean']
+    warm_data = comparison_data[(comparison_data['region'] == warmest_region) & 
+                               (comparison_data['month_start'] == month)]['monthly_temp_mean']
+    
+    # Verificar se ambos os dados existem para este mês
+    if not cold_data.empty and not warm_data.empty:
+        cold_temp = cold_data.iloc[0]
+        warm_temp = warm_data.iloc[0]
+        diff = warm_temp - cold_temp
+        
+        # Adicionar texto da diferença no meio das duas linhas
+        mid_temp = (cold_temp + warm_temp) / 2
+
+plt.tight_layout()
+
+# Salvar o gráfico
+comparison_filename = 'comparacao_menor_vs_maior_temp.png'
+plt.savefig(comparison_filename, dpi=300, bbox_inches='tight')
+plt.close()  # Fechar a figura para liberar memória
+
+print(f"Gráfico de comparação salvo como: {comparison_filename}")
+
+# Estatísticas adicionais
+print("\n=== ESTATÍSTICAS COMPARATIVAS ===")
+print(f"Diferença média anual: {regional_averages.iloc[-1] - regional_averages.iloc[0]:.1f}°C")
+print(f"Maior diferença mensal: {comparison_data.groupby('month_start').apply(lambda x: x['monthly_temp_mean'].max() - x['monthly_temp_mean'].min()).max():.1f}°C")
+print(f"Menor diferença mensal: {comparison_data.groupby('month_start').apply(lambda x: x['monthly_temp_mean'].max() - x['monthly_temp_mean'].min()).min():.1f}°C")
 
 print(f'Todos os gráficos foram salvos em ./{output_dir}/')  
